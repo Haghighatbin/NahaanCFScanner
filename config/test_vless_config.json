@@ -1,0 +1,60 @@
+{
+  "inbounds": [
+    {
+      "port": 1080,
+      "listen": "127.0.0.1",
+      "tag": "socks-inbound",
+      "protocol": "socks",
+      "settings": {
+        "auth": "noauth",
+        "udp": false,
+        "ip": "127.0.0.1"
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": [
+          "http",
+          "tls"
+        ]
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "tag": "proxy",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "173.245.49.235",
+            "port": 443,
+            "users": [
+              {
+                "id": "c1f6fe11-7446-4663-9630-09aa1a3af46a",
+                "encryption": "none"
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "ws",
+        "security": "tls",
+        "tlsSettings": {
+          "allowInsecure": false,
+          "serverName": "private777.digikala.lat",
+          "alpn": [
+            "http/1.1"
+          ],
+          "fingerprint": "chrome"
+        },
+        "wsSettings": {
+          "path": "/",
+          "headers": {
+            "Host": "private3.digikala.lat"
+          }
+        }
+      }
+    }
+  ]
+}

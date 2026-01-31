@@ -1,0 +1,11 @@
+host_header: private3.digikala.lat
+ip_num: '10'
+local_socks_port: '1080'
+server_name: private777.digikala.lat
+sorted_by: download
+tcp_ping_timeout: 2
+test_duration: 10
+timeout: 30
+vless_port: '443'
+vless_uuid: c1f6fe11-7446-4663-9630-09aa1a3af46a
+ws_path: /

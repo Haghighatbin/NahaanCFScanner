@@ -1,0 +1,49 @@
+{
+  "inbounds": [{
+    "port": 1080,
+    "listen": "127.0.0.1",
+    "tag": "socks-inbound",
+    "protocol": "socks",
+    "settings": {
+      "auth": "noauth",
+      "udp": false,
+      "ip": "127.0.0.1"
+    },
+    "sniffing": {
+      "enabled": true,
+      "destOverride": ["http", "tls"]
+    }
+  }],
+  "outbounds": [
+    {
+      "tag": "proxy",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [{
+          "address": "IP_PLACEHOLDER",
+          "port": 443,
+          "users": [{
+            "id": "UUID_PLACEHOLDER",
+            "encryption": "none"
+          }]
+        }]
+      },
+      "streamSettings": {
+        "network": "ws",
+        "security": "tls",
+        "tlsSettings": {
+          "allowInsecure": false,
+          "serverName": "SERVERNAME_PLACEHOLDER",
+          "alpn": ["http/1.1"],
+          "fingerprint": "chrome"
+        },
+        "wsSettings": {
+          "path": "PATH_PLACEHOLDER",
+          "headers": {
+            "Host": "HOST_PLACEHOLDER"
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "inbounds": [
+    {
+      "port": 34099,
+      "protocol": "vmess",
+      "settings": {
+        "clients": [
+          {
+            "id": "db938600-2643-4e4b-ad1f-c92296c68f1e",
+            "alterId": 0
+          }
+        ]
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "protocol": "freedom",
+      "settings": {}
+    }
+  ]
+}
