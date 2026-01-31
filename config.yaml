@@ -1,0 +1,18 @@
+%YAML 1.2
+# VLESS IP Scanner Configuration
+# This config is used to test CloudFlare IPs with the VLESS server
+---
+
+# VLESS Server Configuration
+vless_uuid: 'c1f6fe11-7446-4663-9630-09aa1a3af46a'           # VLESS UUID
+vless_port: '443'                                            # Server port (usually 443 for TLS)
+server_name: 'private777.digikala.lat'                       # SNI / TLS serverName
+host_header: 'private3.digikala.lat'                         # WebSocket Host header
+ws_path: '/'                                                 # WebSocket path
+
+# IP Testing Configuration
+ip_num: '20'                                                 # Number of IPs to test with actual VLESS connection
+sorted_by: 'download'                                        # Sort results by: 'download', 'upload', or 'latency'
+
+# Local SOCKS Proxy Configuration (for testing)
+local_socks_port: '1080'                                     # Local SOCKS5 proxy port for testing
