@@ -295,7 +295,7 @@ def main():
         # Calling DNS resolver
         console.print(f'\n[Starting DNS Resolution and Ping Tests]', style='blue')
         resolver = DNSResolver()
-        collected_ips = resolver.collect()
+        collected_ips = resolver.collect(use_cloudflare_ranges=True)
         resolver.export_handler(collected_ips)
 
         # Sorting out IPs based on their ping results

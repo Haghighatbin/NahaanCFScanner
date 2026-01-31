@@ -5,8 +5,10 @@ https://github.com/vfarid
 his efforts are much appreciated.
 
 MODIFIED: TCP ping instead of ICMP (no root required)
+ENHANCED: Support for CloudFlare IP ranges from file
 """
 import os
+import sys
 import time
 import json
 import dns
@@ -16,6 +18,8 @@ import socket
 from rich.console import Console
 
 console = Console()
+# _is_streamlit = 'streamlit' in sys.modules
+# console = Console(quiet=_is_streamlit)
 
 def tcp_ping(host: str, port: int = 443, timeout: float = 1) -> float:
     """
@@ -37,9 +41,10 @@ def tcp_ping(host: str, port: int = 443, timeout: float = 1) -> float:
         sock.connect((host, port))
         sock.close()
         return time.time() - start_time
+    except KeyboardInterrupt:
+        raise
     except (socket.timeout, socket.error, OSError):
         return None
-
 
 class DNSResolver():
     """The class identifies non-disrupted CloudFlare IPs"""
@@ -47,16 +52,82 @@ class DNSResolver():
         self.last_update = 0
         console.print(f'\n[Initialising the DNS resolver]'.__str__(), style='cyan')
         console.print(f'[Ctrl - C to abort]'.__str__(), style='blue')
+    
+    def load_cloudflare_ranges(self, ranges_file: str = './cf_editor/cloudflare_ranges.txt') -> list:
+        """
+        Load CloudFlare IP ranges from a text file
+        
+        Args:
+            ranges_file: Path to file containing CloudFlare IP ranges (CIDR notation)
+        
+        Returns:
+            List of individual IPs extracted from CIDR ranges
+        """
+        import ipaddress
+        ips = []
+        
+        if not os.path.exists(ranges_file):
+            console.print(f'[No CloudFlare ranges file found at {ranges_file}]'.__str__(), style='yellow')
+            return ips
+        
+        console.print(f'[Loading CloudFlare IP ranges from file]'.__str__(), style='cyan')
+        
+        try:
+            with open(ranges_file, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    # Skip comments and empty lines
+                    if not line or line.startswith('#'):
+                        continue
+                    
+                    try:
+                        # Parse CIDR notation (e.g., 104.16.0.0/13)
+                        network = ipaddress.ip_network(line, strict=False)
+                        hosts = list(network.hosts())
+                        
+                        # Sample strategy to avoid testing too many IPs:
+                        # - Small ranges (<256 IPs): Use all
+                        # - Medium ranges (256-4096): Sample every 4th IP
+                        # - Large ranges (>4096): Sample every 64th IP
+                        if len(hosts) <= 256:
+                            sampled = hosts
+                        elif len(hosts) <= 4096:
+                            sampled = hosts[::4]
+                        else:
+                            sampled = hosts[::64]
+                        
+                        ips.extend([str(ip) for ip in sampled])
+                        console.print(f'  Range {line}: {len(sampled)} IPs sampled', style='blue')
+                        
+                    except Exception as e:
+                        console.print(f'[Warning] Invalid range: {line} - {e}', style='yellow')
+            
+            console.print(f'[Loaded {len(ips)} IPs from CloudFlare ranges]'.__str__(), style='green')
+            
+        except Exception as e:
+            console.print(f'[Warning] Failed to load ranges file: {e}', style='yellow')
+        
+        return ips
 
-    def collect(self) -> list:
-        """Extracts the data from the providers.json and list.json"""
-        console.print(f'[Collecting IPs from the provider.json to analyse]\n'.__str__(), style='green')
+    def collect(self, use_cloudflare_ranges: bool = False) -> dict:
+        """
+        Extracts data from providers.json, list.json, and optionally CloudFlare ranges
+        
+        Args:
+            use_cloudflare_ranges: If True, also load IPs from cloudflare_ranges.txt
+        
+        Returns:
+            Dictionary containing collected IPs
+        """
+        console.print(f'[Collecting IPs from providers.json]'.__str__(), style='green')
         result = {
             "last_update": "",
             "last_timestamp": 0,
             "ipv4": [],
             "ipv6": []
         }
+        
+        # Load from DNS providers
         providers = json.load(open('./cf_editor/providers.json'))
         existing_ips = json.load(open('./cf_editor/list.json'))
         _resolver = dns.resolver.Resolver()
@@ -77,6 +148,23 @@ class DNSResolver():
                     })
             except Exception as e:
                 console.print(f"{repr(e):>76}{'':>4}->{'':>4}Exception ignored")
+        
+        # Optionally load from CloudFlare ranges file
+        if use_cloudflare_ranges:
+            cf_ranges_ips = self.load_cloudflare_ranges()
+            current_time = int(time.time())
+            
+            for ip in cf_ranges_ips:
+                # Check if IP already exists
+                if not any(item['ip'] == ip for item in result["ipv4"]):
+                    result["ipv4"].append({
+                        "ip": ip,
+                        "operator": "CF_RANGE",
+                        "provider": "cloudflare_ranges",
+                        "created_at": current_time
+                    })
+            
+            console.print(f'[Total IPs after adding CF ranges: {len(result["ipv4"])}]', style='green')
 
         result["last_update"] = datetime.fromtimestamp(self.last_update).__str__()
         result["last_timestamp"] = self.last_update
@@ -87,7 +175,7 @@ class DNSResolver():
 
     def export_handler(self, result: list) -> None:
         """Generates the list.json and list.txt files"""
-        console.print(f'[Exporting the collected IPs list.json to analyse]'.__str__(), style='green')
+        console.print(f'[Exporting the collected IPs to list.json]'.__str__(), style='green')
         try:
             with open('./results/list.json', 'w') as json_file:
                 json_file.write(json.dumps(result, indent=4))
@@ -95,7 +183,7 @@ class DNSResolver():
             with open('./results/list.txt', 'w') as text_file:
                 text_file.write(f"Last Update: {result['last_update']}\n\nIPv4:\n")
                 for el in result["ipv4"]:
-                    text_file.write(f"  - {el['ip']:15s}    {el['operator']:5s}    {el['provider']}    {el['created_at']}\n")
+                    text_file.write(f"  - {el['ip']:15s}    {el['operator']:10s}    {el['provider']}    {el['created_at']}\n")
 
             console.print(f'[Checking the collected IP connectivity (TCP port 443), please be patient]'.__str__(), style='blue')
 
@@ -114,29 +202,42 @@ class DNSResolver():
         """
         sign = 0
         valid_ip_list, invalid_ip_list, shared_ip_list = [], [], []
-
-        with console.status('[bold green] Checking collected IPV4s...') as status:
-            for item in collected_ips['ipv4']:
-                try:
-                    # Use TCP ping instead of ICMP
-                    pinged_ip = tcp_ping(item['ip'], port=443, timeout=2)
-                    
-                    if pinged_ip is None:
-                        invalid_ip_list.append((item['ip'], item['operator']))
-                    else:
-                        if item['ip'] in [ip[0] for ip in valid_ip_list]:
-                            shared_ip_list.append((item['ip'], pinged_ip, item['operator']))
+        
+        try:
+            with console.status('[bold green] Checking collected IPV4s...') as status:
+                for item in collected_ips['ipv4']:
+                    if 'streamlit' in sys.modules:
+                        import streamlit as st
+                        if st.session_state.get('stop_requested', False):
+                            console.print("\n[!] Stop requested. Aborting ping loop...", style="bold red")
+                            break
+                    try:
+                        # Use TCP ping instead of ICMP
+                        pinged_ip = tcp_ping(item['ip'], port=443, timeout=2)
+                        
+                        if pinged_ip is None:
+                            invalid_ip_list.append((item['ip'], item['operator']))
                         else:
-                            valid_ip_list.append((item['ip'], pinged_ip, item['operator']))
+                            if item['ip'] in [ip[0] for ip in valid_ip_list]:
+                                shared_ip_list.append((item['ip'], pinged_ip, item['operator']))
+                            else:
+                                valid_ip_list.append((item['ip'], pinged_ip, item['operator']))
 
-                    sign += 1
+                        sign += 1
+                        time.sleep(0.2)
+                    except KeyboardInterrupt:
+                        console.print('Aborted by user.', style='bold red')
+                        raise
+                    except Exception as e:
+                        print(e)
 
-                except KeyboardInterrupt:
-                    console.print('aborted.')
-                    exit()
-                except Exception as e:
-                    console.print(e)
-            
+        except KeyboardInterrupt:
+            console.print('aborted by user.', style='bold red')
+            raise
+        except Exception as e:
+            console.print(e)
+        
+        
         sorted_list = sorted(valid_ip_list, key=lambda x: x[1], reverse=True)
         console.print(f'\nFound {len(sorted_list)} accessible IPs [Sorted by connection time]'.__str__(), style='green')
         

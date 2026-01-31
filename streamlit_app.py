@@ -18,6 +18,9 @@ import time
 import subprocess
 import socket
 
+from main import kill_process_on_port
+
+
 # Import helper functions
 from streamlit_helpers import (
     load_config_yaml,
@@ -87,41 +90,11 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# # Custom CSS for better styling
-# st.markdown("""
-#     <style>
-#     .big-font {
-#         font-size: 24px !important;
-#         font-weight: bold;
-#     }
-#     .success-box {
-#         padding: 20px;
-#         border-radius: 10px;
-#         background-color: #d4edda;
-#         border: 2px solid #28a745;
-#         margin: 10px 0;
-#     }
-#     .warning-box {
-#         padding: 20px;
-#         border-radius: 10px;
-#         background-color: #fff3cd;
-#         border: 2px solid #ffc107;
-#         margin: 10px 0;
-#     }
-#     .error-box {
-#         padding: 20px;
-#         border-radius: 10px;
-#         background-color: #f8d7da;
-#         border: 2px solid #dc3545;
-#         margin: 10px 0;
-#     }
-#     .stProgress > div > div > div > div {
-#         background-color: #28a745;
-#     }
-#     </style>
-# """, unsafe_allow_html=True)
-
-# Initialize session state
+# Initialise session state
+if 'quick_test_mode' not in st.session_state:
+    st.session_state.quick_test_mode = False
+if 'stop_requested' not in st.session_state:
+    st.session_state.stop_requested = False
 if 'scan_running' not in st.session_state:
     st.session_state.scan_running = False
 if 'scan_results' not in st.session_state:
@@ -157,6 +130,8 @@ def add_log(message, level="info"):
     # Keep only last 100 logs
     if len(st.session_state.logs) > 100:
         st.session_state.logs = st.session_state.logs[-100:]
+
+
 
 # ==================== SIDEBAR: CONFIGURATION ====================
 st.sidebar.title("⚙️ Configuration")
@@ -397,47 +372,73 @@ with tab1:
     st.markdown("---")
     
     # Scan control buttons
+# Callback functions for button state management
+    def start_scan_callback():
+        st.session_state.scan_running = True
+        st.session_state.quick_test_mode = False
+        st.session_state.logs = []
+    
+    def quick_test_callback():
+        st.session_state.scan_running = True
+        st.session_state.quick_test_mode = True
+        st.session_state.logs = []
+    
+    def stop_scan_callback():
+        st.session_state.scan_running = False
+        st.session_state.stop_requested = True
+        # Kill any xray process currently running on the configured port
+        try:
+            from main import kill_process_on_port
+            port = int(st.session_state.current_config.get('local_socks_port', 1080))
+            kill_process_on_port(port)
+        except:
+            pass
+        add_log("🛑 Stop command sent. Cleaning up...", "warning")
+
+    # Scan control buttons
     col1, col2, col3 = st.columns([2, 2, 1])
     
     with col1:
-        start_scan = st.button(
+        st.button(
             "▶️ START SCAN",
             type="primary",
             disabled=st.session_state.scan_running,
-            use_container_width=True
+            use_container_width=True,
+            on_click=start_scan_callback
         )
     
     with col2:
-        if st.session_state.scan_running:
-            stop_scan = st.button(
-                "⏹️ STOP SCAN",
-                type="secondary",
-                use_container_width=True
-            )
+        st.button(
+            "⏹️ STOP SCAN",
+            type="secondary",
+            disabled=not st.session_state.scan_running,
+            use_container_width=True,
+            on_click=stop_scan_callback
+        )
     
     with col3:
-        quick_test = st.button(
+        st.button(
             "🔬 Quick Test",
             help="Test only 5 IPs",
-            use_container_width=True
+            use_container_width=True,
+            disabled=st.session_state.scan_running,
+            on_click=quick_test_callback
         )
     
     # Start scan logic
-    if start_scan or quick_test:
+    if st.session_state.scan_running:
         if not check_xray_binary(XRAY_BINARY):
             st.error("❌ xray-core binary not found! Please ensure xray.exe is in converters/xray-core/")
         else:
-            st.session_state.scan_running = True
-            st.session_state.logs = []
-            add_log("🏁 Starting scan...", "info")
             
             # Save config
             save_config_yaml(config, CONFIG_FILE)
             
-            # Quick test mode
-            if quick_test:
-                config['ip_num'] = '5'
-                add_log("🔬 Quick test mode: Testing only 5 IPs", "info")
+            if st.session_state.scan_running:
+                # Quick test mode
+                if st.session_state.get('quick_test_mode', False):
+                    config['ip_num'] = '3'
+                    add_log("🔬 Quick test mode: Testing only 3 IPs", "info")
             
             # Progress containers
             progress_container = st.container()
@@ -458,7 +459,7 @@ with tab1:
                         from cf_editor.cf_ip_rev2 import DNSResolver
                         
                         resolver = DNSResolver()
-                        collected_ips = resolver.collect()
+                        collected_ips = resolver.collect(use_cloudflare_ranges=True)
                         resolver.export_handler(collected_ips)
                         
                         dns_progress.progress(100)
@@ -491,7 +492,6 @@ with tab1:
                         ping_progress.progress(100)
                         ping_status.success(f"✅ Found {len(sorted_by_ping)} accessible IPs")
                         add_log(f"✅ Found {len(sorted_by_ping)} accessible IPs", "success")
-                        
                         status.update(label="✅ Phase 2: TCP Connectivity Complete", state="complete")
                         
                     except Exception as e:
@@ -499,7 +499,7 @@ with tab1:
                         add_log(f"❌ TCP ping failed: {e}", "error")
                         st.session_state.scan_running = False
                         st.stop()
-                
+
                 # Phase 3: VLESS Speed Test
                 with st.status("⏲ Phase 3: VLESS Speed Test", expanded=True) as status:
                     st.markdown(f"**Testing top {ip_num} IPs with actual VLESS connections**")
@@ -525,6 +525,19 @@ with tab1:
                     VLESS_TEMPLATE_FILE = os.path.join(CURRENT_DIR, 'config', 'template_config_vless.json')
                     
                     for idx, ip_tuple in enumerate(test_ips, 1):
+                        if st.session_state.get('stop_requested', False):
+                            add_log("⏹️ Scan stopped by user", "warning")
+                            # Reset flags
+                            st.session_state.stop_requested = False
+                            st.session_state.scan_running = False
+                            st.rerun()
+                            
+                            # Force kill any hanging xray process on your socks port
+                            kill_process_on_port(int(config.get('local_socks_port', 1080)))
+                            
+                            st.warning("Scan stopped by user. Cleaning up background processes...")
+                            st.stop()
+
                         ip = ip_tuple[0]
                         ping_ms = round(float(ip_tuple[1] * 1000), 1)
                         
@@ -563,6 +576,11 @@ with tab1:
                         vless_status.info(f"Progress: {idx}/{len(test_ips)} ({progress_pct}%) | ✅ {len(result_list)} passed")
                         
                         time.sleep(0.5)
+                        # Check for stop request
+                        if st.session_state.get('stop_requested', False):
+                            add_log("⏹️ Scan stopped by user", "warning")
+                            st.session_state.stop_requested = False
+                            break
                     
                     vless_progress.progress(100)
                     
