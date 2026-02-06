@@ -256,26 +256,32 @@ st.sidebar.title("🎛️ Scan Parameters")
 preset = st.sidebar.selectbox(
     "Choose Preset",
     ["🐌 Slow Internet (Safe)", "💨Fast Internet (Aggressive)", "🎛️ Custom"],
-    help="Optimised settings for different connection speeds"
+    help="Optimised settings for different connection speeds",
+    key="preset_selector"
 )
-
+print(preset)
 # Apply preset values
 if preset == "🐌 Slow Internet (Safe)":
-    default_timeout = 30
+    default_timeout = 50
     default_test_duration = 10
     default_ip_num = 10
     default_concurrent = 1
-elif preset == "💨 Fast Internet (Aggressive)":
+    default_tcp_ping_timeout = 5
+    default_ping_attempts = 5
+elif preset == "💨Fast Internet (Aggressive)":
     default_timeout = 10
     default_test_duration = 5
     default_ip_num = 20
     default_concurrent = 3
+    default_tcp_ping_timeout = 2
+    default_ping_attempts = 3
 else:  # Custom
     default_timeout = int(config.get('timeout', 20))
     default_test_duration = int(config.get('test_duration', 5))
     default_ip_num = int(config.get('ip_num', 20))
     default_concurrent = 1
-
+    default_tcp_ping_timeout = int(config.get('tcp_ping_timeout', 2))
+    default_ping_attempts = int(config.get('ping_attempts', 3))
 # Advanced controls
 with st.sidebar.expander("⚙️ Advanced Controls", expanded=(preset == "🎛️ Custom")):
     connection_timeout = st.slider(
@@ -283,6 +289,7 @@ with st.sidebar.expander("⚙️ Advanced Controls", expanded=(preset == "🎛�
         min_value=5,
         max_value=60,
         value=default_timeout,
+        key=f"timeout_{preset}",
         help="How long to wait for each connection"
     )
     
@@ -291,6 +298,7 @@ with st.sidebar.expander("⚙️ Advanced Controls", expanded=(preset == "🎛�
         min_value=3,
         max_value=30,
         value=default_test_duration,
+        key=f"duration_{preset}",
         help="Duration of download speed test"
     )
     
@@ -299,6 +307,7 @@ with st.sidebar.expander("⚙️ Advanced Controls", expanded=(preset == "🎛�
         min_value=5,
         max_value=50,
         value=default_ip_num,
+        key=f"ip_num_{preset}",
         help="How many IPs to test with VLESS"
     )
     
@@ -306,7 +315,8 @@ with st.sidebar.expander("⚙️ Advanced Controls", expanded=(preset == "🎛�
         "TCP Ping Timeout (seconds)",
         min_value=1,
         max_value=30,
-        value=2,
+        value=default_tcp_ping_timeout,
+        key=f"tcp_ping_{preset}",
         help="Timeout for initial TCP connectivity test"
     )
 
@@ -314,10 +324,11 @@ with st.sidebar.expander("⚙️ Advanced Controls", expanded=(preset == "🎛�
         "Ping Attempts per IP",
         min_value=1,
         max_value=5,
-        value=3,
+        value=default_ping_attempts,
+        key=f"ping_attempts_{preset}",
         help="Multiple pings improve reliability in unstable networks (recommended: 3)"
     )
-    
+
     retry_failed = st.checkbox(
         "Retry Failed IPs",
         value=False,
@@ -441,13 +452,16 @@ with tab1:
             
             # Save config
             save_config_yaml(config, CONFIG_FILE)
-            
+            actual_ip_num = ip_num
             if st.session_state.scan_running:
                 # Quick test mode
                 if st.session_state.get('quick_test_mode', False):
+                    actual_ip_num = 3
                     config['ip_num'] = '3'
                     add_log("🔬 Quick test mode: Testing only 3 IPs", "info")
-            
+                else:
+                    config['ip_num'] = str(ip_num)
+
             # Progress containers
             progress_container = st.container()
             log_container = st.container()
@@ -500,8 +514,16 @@ with tab1:
                             sorted_by_ping.append((test_ip, 0.005, 'TEST'))
                         
                         ping_progress.progress(100)
+
                         ping_status.success(f"✅ Found {len(sorted_by_ping)} accessible IPs")
+                        st.info(f"ℹ️ Will test top {actual_ip_num} IPs with VLESS (controlled by slider). "
+                                f"All {len(sorted_by_ping)} IPs saved to results/sorted_list.txt")
                         add_log(f"✅ Found {len(sorted_by_ping)} accessible IPs", "success")
+                        add_log(f"ℹ️ Will test top {actual_ip_num} IPs with VLESS", "info")                        
+                        
+                        # ping_status.success(f"✅ Found {len(sorted_by_ping)} accessible IPs")
+                        # add_log(f"✅ Found {len(sorted_by_ping)} accessible IPs", "success")
+                        
                         status.update(label="✅ Phase 2: TCP Connectivity Complete", state="complete")
                         
                     except Exception as e:
@@ -512,12 +534,12 @@ with tab1:
 
                 # Phase 3: VLESS Speed Test
                 with st.status("⏲ Phase 3: VLESS Speed Test", expanded=True) as status:
-                    st.markdown(f"**Testing top {ip_num} IPs with actual VLESS connections**")
+                    st.markdown(f"**Testing top {actual_ip_num} IPs with actual VLESS connections**")
                     vless_progress = st.progress(0)
                     vless_status = st.empty()
                     current_test = st.empty()
                     
-                    add_log(f"Starting VLESS speed tests on {ip_num} IPs...", "info")
+                    add_log(f"Starting VLESS speed tests on {actual_ip_num} IPs...", "info")
                     
                     # Import test function
                     from main import test_vless_connection, generate_vless_config, kill_process_on_port
@@ -530,7 +552,7 @@ with tab1:
                         time.sleep(1)
                     
                     result_list = []
-                    test_ips = list(reversed(sorted_by_ping[-ip_num:]))
+                    test_ips = list(reversed(sorted_by_ping[-actual_ip_num:]))
                     
                     VLESS_TEMPLATE_FILE = os.path.join(CURRENT_DIR, 'config', 'template_config_vless.json')
                     
