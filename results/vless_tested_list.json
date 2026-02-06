@@ -1,112 +1,101 @@
 [
     {
-        "download_rate": "5.31 MB/s",
+        "download_rate": "4.81 MB/s",
         "upload_rate": "N/A",
-        "latency_rate": "290 ms",
-        "address_str": "173.245.49.235",
+        "latency_rate": "256 ms",
+        "address_str": "104.16.6.65",
         "port_str": "443",
         "uuid_str": "c1f6fe11-7446-4663-9630-09aa1a3af46a",
-        "operator": "TEST",
-        "download_numeric": 5.31,
-        "latency_numeric": 290.0
+        "operator": "HWB",
+        "download_numeric": 4.81,
+        "latency_numeric": 256.0
     },
     {
-        "download_rate": "4.48 MB/s",
+        "download_rate": "4.71 MB/s",
         "upload_rate": "N/A",
-        "latency_rate": "271 ms",
-        "address_str": "172.64.35.226",
-        "port_str": "443",
-        "uuid_str": "c1f6fe11-7446-4663-9630-09aa1a3af46a",
-        "operator": "PSM",
-        "download_numeric": 4.48,
-        "latency_numeric": 271.0
-    },
-    {
-        "download_rate": "4.45 MB/s",
-        "upload_rate": "N/A",
-        "latency_rate": "340 ms",
-        "address_str": "104.16.119.47",
+        "latency_rate": "296 ms",
+        "address_str": "104.19.250.20",
         "port_str": "443",
         "uuid_str": "c1f6fe11-7446-4663-9630-09aa1a3af46a",
         "operator": "MCI",
-        "download_numeric": 4.45,
-        "latency_numeric": 340.0
+        "download_numeric": 4.71,
+        "latency_numeric": 296.0
     },
     {
-        "download_rate": "4.11 MB/s",
+        "download_rate": "4.53 MB/s",
         "upload_rate": "N/A",
-        "latency_rate": "287 ms",
+        "latency_rate": "280 ms",
+        "address_str": "104.31.16.136",
+        "port_str": "443",
+        "uuid_str": "c1f6fe11-7446-4663-9630-09aa1a3af46a",
+        "operator": "SHM",
+        "download_numeric": 4.53,
+        "latency_numeric": 280.0
+    },
+    {
+        "download_rate": "4.40 MB/s",
+        "upload_rate": "N/A",
+        "latency_rate": "264 ms",
         "address_str": "104.20.62.55",
         "port_str": "443",
         "uuid_str": "c1f6fe11-7446-4663-9630-09aa1a3af46a",
         "operator": "SBN",
-        "download_numeric": 4.11,
-        "latency_numeric": 287.0
+        "download_numeric": 4.4,
+        "latency_numeric": 264.0
     },
     {
-        "download_rate": "3.62 MB/s",
+        "download_rate": "4.29 MB/s",
         "upload_rate": "N/A",
-        "latency_rate": "249 ms",
-        "address_str": "162.251.82.187",
-        "port_str": "443",
-        "uuid_str": "c1f6fe11-7446-4663-9630-09aa1a3af46a",
-        "operator": "RTL",
-        "download_numeric": 3.62,
-        "latency_numeric": 249.0
-    },
-    {
-        "download_rate": "3.23 MB/s",
-        "upload_rate": "N/A",
-        "latency_rate": "280 ms",
-        "address_str": "104.16.4.103",
-        "port_str": "443",
-        "uuid_str": "c1f6fe11-7446-4663-9630-09aa1a3af46a",
-        "operator": "MKH",
-        "download_numeric": 3.23,
-        "latency_numeric": 280.0
-    },
-    {
-        "download_rate": "3.00 MB/s",
-        "upload_rate": "N/A",
-        "latency_rate": "289 ms",
+        "latency_rate": "266 ms",
         "address_str": "104.21.51.208",
         "port_str": "443",
         "uuid_str": "c1f6fe11-7446-4663-9630-09aa1a3af46a",
         "operator": "AST",
-        "download_numeric": 3.0,
-        "latency_numeric": 289.0
+        "download_numeric": 4.29,
+        "latency_numeric": 266.0
     },
     {
-        "download_rate": "2.18 MB/s",
+        "download_rate": "2.81 MB/s",
         "upload_rate": "N/A",
-        "latency_rate": "373 ms",
-        "address_str": "104.17.42.10",
+        "latency_rate": "266 ms",
+        "address_str": "172.64.35.226",
         "port_str": "443",
         "uuid_str": "c1f6fe11-7446-4663-9630-09aa1a3af46a",
-        "operator": "MCI",
-        "download_numeric": 2.18,
-        "latency_numeric": 373.0
+        "operator": "PSM",
+        "download_numeric": 2.81,
+        "latency_numeric": 266.0
     },
     {
-        "download_rate": "2.05 MB/s",
+        "download_rate": "2.77 MB/s",
         "upload_rate": "N/A",
-        "latency_rate": "308 ms",
-        "address_str": "104.17.88.212",
+        "latency_rate": "555 ms",
+        "address_str": "173.245.49.235",
         "port_str": "443",
         "uuid_str": "c1f6fe11-7446-4663-9630-09aa1a3af46a",
-        "operator": "MCI",
-        "download_numeric": 2.05,
-        "latency_numeric": 308.0
+        "operator": "TEST",
+        "download_numeric": 2.77,
+        "latency_numeric": 555.0
     },
     {
-        "download_rate": "1.84 MB/s",
+        "download_rate": "2.77 MB/s",
         "upload_rate": "N/A",
-        "latency_rate": "1678 ms",
+        "latency_rate": "259 ms",
+        "address_str": "104.16.4.103",
+        "port_str": "443",
+        "uuid_str": "c1f6fe11-7446-4663-9630-09aa1a3af46a",
+        "operator": "MKH",
+        "download_numeric": 2.77,
+        "latency_numeric": 259.0
+    },
+    {
+        "download_rate": "1.94 MB/s",
+        "upload_rate": "N/A",
+        "latency_rate": "260 ms",
         "address_str": "104.16.219.230",
         "port_str": "443",
         "uuid_str": "c1f6fe11-7446-4663-9630-09aa1a3af46a",
         "operator": "MCI",
-        "download_numeric": 1.84,
-        "latency_numeric": 1678.0
+        "download_numeric": 1.94,
+        "latency_numeric": 260.0
     }
 ]

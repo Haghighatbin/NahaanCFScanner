@@ -1,0 +1,22 @@
+Total Tested: 544 | Valid: 19 | Invalid: 513 | Shared: 12
+====================================================================================================
+
+[  1]  IP:    162.159.1.94  Latency:  22.3ms  Jitter:± 13.0ms  [OK]  Success:3/3  OP:MCI
+[  2]  IP:  185.148.105.52  Latency:  22.3ms  Jitter:±  7.5ms  [OK]  Success:3/3  OP:MBT
+[  3]  IP:   104.16.119.47  Latency:  22.3ms  Jitter:±  7.5ms  [OK]  Success:3/3  OP:MCI
+[  4]  IP:   160.153.0.179  Latency:  15.5ms  Jitter:±  9.0ms  [OK]  Success:3/3  OP:SHT
+[  5]  IP:   104.17.231.69  Latency:  15.4ms  Jitter:±  0.2ms  [OK]  Success:3/3  OP:ZTL
+[  6]  IP:    104.17.42.10  Latency:  15.3ms  Jitter:±  7.5ms  [OK]  Success:3/3  OP:MCI
+[  7]  IP:  162.251.82.187  Latency:  15.1ms  Jitter:± 13.3ms  [OK]  Success:3/3  OP:RTL
+[  8]  IP:   172.66.213.38  Latency:   6.7ms  Jitter:±  6.1ms  [OK]  Success:3/3  OP:AFN
+[  9]  IP:   104.17.88.212  Latency:   6.1ms  Jitter:±  5.3ms  [OK]  Success:3/3  OP:MCI
+[ 10]  IP:   162.159.62.69  Latency:   6.1ms  Jitter:± 14.5ms  [OK]  Success:3/3  OP:RSP
+[ 11]  IP:  104.16.219.230  Latency:   6.0ms  Jitter:±  1.0ms  [OK]  Success:3/3  OP:MCI
+[ 12]  IP:     104.16.6.65  Latency:   5.8ms  Jitter:±  0.3ms  [OK]  Success:3/3  OP:HWB
+[ 13]  IP:   172.64.35.226  Latency:   5.8ms  Jitter:± 14.7ms  [OK]  Success:3/3  OP:PSM
+[ 14]  IP:   104.21.51.208  Latency:   5.5ms  Jitter:±  6.4ms  [OK]  Success:3/3  OP:AST
+[ 15]  IP:    104.20.62.55  Latency:   5.5ms  Jitter:±  0.8ms  [OK]  Success:3/3  OP:SBN
+[ 16]  IP:    104.16.4.103  Latency:   5.4ms  Jitter:±  0.6ms  [OK]  Success:3/3  OP:MKH
+[ 17]  IP:   203.32.121.53  Latency:   5.0ms  Jitter:± 14.2ms  [OK]  Success:3/3  OP:MTN
+[ 18]  IP:   104.19.250.20  Latency:   5.0ms  Jitter:±  0.4ms  [OK]  Success:3/3  OP:MCI
+[ 19]  IP:   104.31.16.136  Latency:   4.7ms  Jitter:±  0.6ms  [OK]  Success:3/3  OP:SHM

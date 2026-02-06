@@ -305,9 +305,17 @@ with st.sidebar.expander("⚙️ Advanced Controls", expanded=(preset == "🎛�
     tcp_ping_timeout = st.slider(
         "TCP Ping Timeout (seconds)",
         min_value=1,
-        max_value=5,
+        max_value=30,
         value=2,
         help="Timeout for initial TCP connectivity test"
+    )
+
+    ping_attempts = st.slider(
+        "Ping Attempts per IP",
+        min_value=1,
+        max_value=5,
+        value=3,
+        help="Multiple pings improve reliability in unstable networks (recommended: 3)"
     )
     
     retry_failed = st.checkbox(
@@ -315,7 +323,7 @@ with st.sidebar.expander("⚙️ Advanced Controls", expanded=(preset == "🎛�
         value=False,
         help="Attempt to retry IPs that failed on first attempt"
     )
-    
+
     if retry_failed:
         retry_attempts = st.number_input(
             "Retry Attempts",
@@ -482,8 +490,10 @@ with tab1:
                     add_log("Testing TCP connectivity (port 443)...", "info")
                     
                     try:
-                        sorted_by_ping = resolver.ping_handler(collected_ips)
-                        
+                        sorted_by_ping = resolver.ping_handler(collected_ips,
+                                                               tcp_timeout=config.get('tcp_ping_timeout', 2),
+                                                                ping_attempts=ping_attempts
+                                                               )
                         # Add test IP if requested
                         if include_test_ip and test_ip:
                             add_log(f"Adding test IP: {test_ip}", "info")
@@ -759,9 +769,9 @@ with tab2:
         
         st.dataframe(display_df, use_container_width=True, height=400)
         
-        # Visualizations
+        # Visualisations
         st.markdown("---")
-        st.subheader("📊 Visualizations")
+        st.subheader("📊 Visualisations")
         
         col1, col2 = st.columns(2)
         

@@ -14,14 +14,17 @@ import json
 import dns
 import dns.resolver
 from datetime import datetime
+import statistics
 import socket
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 from rich.console import Console
 
 console = Console()
 # _is_streamlit = 'streamlit' in sys.modules
 # console = Console(quiet=_is_streamlit)
 
-def tcp_ping(host: str, port: int = 443, timeout: float = 1) -> float:
+def tcp_ping(host: str, port: int = 443, timeout: float = 2) -> float:
     """
     TCP ping that doesn't require root privileges.
     Measures time to establish TCP connection to port 443.
@@ -37,14 +40,29 @@ def tcp_ping(host: str, port: int = 443, timeout: float = 1) -> float:
     try:
         start_time = time.time()
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+        # Experiment: Avoid TIME_WAIT accumulation
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, 
+                       bytes([0, 0, 0, 0, 0, 0, 0, 0]))  # Immediate close
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
         sock.settimeout(timeout)
         sock.connect((host, port))
-        sock.close()
+        # sock.close()
         return time.time() - start_time
+    
     except KeyboardInterrupt:
         raise
-    except (socket.timeout, socket.error, OSError):
+    except (socket.timeout, socket.error, OSError, ConnectionRefusedError):
         return None
+    finally:
+        if sock:
+            try:
+                sock.shutdown(socket.SHUT_RDWR)
+            except:
+                pass
+            sock.close()
+            del sock  # Force garbage collection
 
 class DNSResolver():
     """The class identifies non-disrupted CloudFlare IPs"""
@@ -189,72 +207,240 @@ class DNSResolver():
 
         except Exception as e:
             console.print(repr(e))
-    
-    def ping_handler(self, collected_ips: list) -> list:
+
+    def ping_handler(self,
+                    collected_ips: list,
+                    batch_size: int = 500,
+                    max_workers: int = 30,
+                    tcp_timeout: float = 2.0, 
+                    ping_attempts: int = 3
+                    ) -> list:
         """
-        Tests IPs using TCP connection to port 443 (no root required).
-        Sorts validated IPs ascendingly (fastest IP comes last).
+        Tests IPs using multiple TCP pings with batching and concurrency.
+        Prevents socket exhaustion when testing 50,000+ IPs.
         
-        TCP ping is more reliable than ICMP for CloudFlare IPs since:
-        1. Doesn't require root/sudo privileges
-        2. Tests actual HTTPS port availability
-        3. More representative of actual connection quality
-        """
-        sign = 0
+        Args:
+            collected_ips: List of IPs to test
+            batch_size: Process IPs in batches (default 500)
+            max_workers: Concurrent connections per batch (default 30)
+            tcp_timeout: Timeout per ping attempt
+            ping_attempts: Number of pings per IP (default 3 for reliability)
+        """        
         valid_ip_list, invalid_ip_list, shared_ip_list = [], [], []
+        total_ips = len(collected_ips['ipv4'])
         
+        console.print(f'\n[Testing {total_ips} IPs in batches of {batch_size} with {max_workers} concurrent threads]', 
+                    style='cyan')
+        console.print(f'[{ping_attempts} ping attempts per IP for stability measurement]', style='blue')
+        
+        def test_ip_stability(item):
+            """Test a single IP with multiple ping attempts"""
+            try:
+                ping_results = []
+                
+                for attempt in range(ping_attempts):
+                    result = tcp_ping(item['ip'], port=443, timeout=tcp_timeout)
+                    if result is not None:
+                        ping_results.append(result)
+                    time.sleep(0.05)  # Small delay between attempts
+                
+                # Require at least 50% success rate
+                min_required = max(1, ping_attempts // 2)
+                
+                if len(ping_results) >= min_required:
+                    median_latency = statistics.median(ping_results)
+                    jitter = statistics.stdev(ping_results) if len(ping_results) > 1 else 0.0
+                    
+                    return {
+                        'ip': item['ip'],
+                        'operator': item['operator'],
+                        'median_latency': median_latency,
+                        'jitter': jitter,
+                        'success_count': len(ping_results),
+                        'status': 'valid'
+                    }
+                else:
+                    return {
+                        'ip': item['ip'],
+                        'operator': item['operator'],
+                        'status': 'invalid'
+                    }
+                    
+            except KeyboardInterrupt:
+                raise
+            except Exception as e:
+                return {
+                    'ip': item['ip'],
+                    'operator': item['operator'],
+                    'status': 'error',
+                    'error': str(e)
+                }
+
+        live_results_path = './results/results_live.txt'
+        
+        # Initialise live file with header
+        with open(live_results_path, 'w', encoding='utf-8') as live_file:
+            live_file.write(f"CloudFlare IP Scanner - Live Results\n")
+            live_file.write(f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            live_file.write(f"Total IPs to test: {total_ips}\n")
+            live_file.write(f"Batch size: {batch_size} | Workers: {max_workers} | Ping attempts: {ping_attempts}\n")
+            live_file.write("="*100 + "\n\n")
+
         try:
-            with console.status('[bold green] Checking collected IPV4s...') as status:
-                for item in collected_ips['ipv4']:
-                    if 'streamlit' in sys.modules:
-                        import streamlit as st
-                        if st.session_state.get('stop_requested', False):
-                            console.print("\n[!] Stop requested. Aborting ping loop...", style="bold red")
-                            break
-                    try:
-                        # Use TCP ping instead of ICMP
-                        pinged_ip = tcp_ping(item['ip'], port=443, timeout=2)
+            with console.status('[bold green] Checking collected IPV4s with stability test...') as status:
+                # Process in batches to avoid socket exhaustion
+                for batch_num, batch_start in enumerate(range(0, total_ips, batch_size), 1):
+                    batch_end = min(batch_start + batch_size, total_ips)
+                    batch = collected_ips['ipv4'][batch_start:batch_end]
+                    
+                    console.print(f'\n[Batch {batch_num}: Testing IPs {batch_start+1}-{batch_end}]', 
+                                style='blue')
+                    
+                    batch_valid_results = []
+
+                    # Use ThreadPoolExecutor for concurrent testing within batch
+                    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                        future_to_item = {
+                            executor.submit(test_ip_stability, item): item 
+                            for item in batch
+                        }
                         
-                        if pinged_ip is None:
-                            invalid_ip_list.append((item['ip'], item['operator']))
-                        else:
-                            if item['ip'] in [ip[0] for ip in valid_ip_list]:
-                                shared_ip_list.append((item['ip'], pinged_ip, item['operator']))
+                        completed = 0
+                        for future in as_completed(future_to_item):
+                            completed += 1
+                            result = future.result()
+                            
+                            if result['status'] == 'valid':
+                                # Check for duplicate IPs
+                                if result['ip'] in [ip[0] for ip in valid_ip_list]:
+                                    shared_ip_list.append((
+                                        result['ip'],
+                                        result['median_latency'],
+                                        result['operator'],
+                                        result['jitter'],
+                                        result['success_count']
+                                    ))
+                                else:
+                                    valid_ip_list.append((
+                                        result['ip'],
+                                        result['median_latency'],
+                                        result['operator'],
+                                        result['jitter'],
+                                        result['success_count']
+                                    ))
+                                    batch_valid_results.append((result['ip'], result['median_latency'], 
+                                        result['operator'], result['jitter'], 
+                                        result['success_count']))
+                                    
+                                # Log unstable connections
+                                if result['jitter'] > 0.1:
+                                    console.print(
+                                        f"  ⚠️ {result['ip']} - Unstable ({int(result['jitter']*1000)}ms jitter)",
+                                        style='yellow'
+                                    )
+                            
+                            elif result['status'] == 'invalid':
+                                invalid_ip_list.append((result['ip'], result['operator']))
+                            
+                            # Progress indicator within batch
+                            if completed % 50 == 0:
+                                console.print(f"  [{completed}/{len(batch)} in batch]", style='dim')
+                    
+                    # Progress update after batch
+                    progress_pct = int((batch_end / total_ips) * 100)
+                    console.print(
+                        f'[Progress: {progress_pct}% | Valid: {len(valid_ip_list)} | '
+                        f'Invalid: {len(invalid_ip_list)} | Shared: {len(shared_ip_list)}]',
+                        style='green'
+                    )
+                    # Write THIS batch's results to live file immediately
+                    with open(live_results_path, 'a', encoding='utf-8') as live_file:
+                        live_file.write(f"\n--- Batch {batch_num} (IPs {batch_start+1}-{batch_end}) ---\n")
+                        live_file.write(f"Timestamp: {datetime.now().strftime('%H:%M:%S')}\n")
+                        live_file.write(f"Found {len(batch_valid_results)} valid IPs in this batch\n\n")
+                        
+                        for ip_data in batch_valid_results:
+                            latency_ms = round(float(ip_data[1] * 1000), 1)
+                            jitter_ms = round(float(ip_data[3] * 1000), 1)
+                            success_rate = f"{ip_data[4]}/{ping_attempts}"
+                            
+                            # Use ASCII for file compatibility
+                            if ip_data[3] < 0.05:
+                                stability = "[OK]"
+                            elif ip_data[3] < 0.15:
+                                stability = "[!!]"
                             else:
-                                valid_ip_list.append((item['ip'], pinged_ip, item['operator']))
-
-                        sign += 1
-                        time.sleep(0.2)
-                    except KeyboardInterrupt:
-                        console.print('Aborted by user.', style='bold red')
-                        raise
-                    except Exception as e:
-                        print(e)
-
+                                stability = "[XX]"
+                            
+                            line = (f"  IP: {ip_data[0]:>16}  Latency: {latency_ms:>6}ms  "
+                                f"Jitter: ±{jitter_ms:>5}ms  {stability}  Success: {success_rate}  OP: {ip_data[2]}\n")
+                            live_file.write(line)
+                        
+                        live_file.flush()  # Force write to disk immediately
+                    
+                    # Critical: Pause between batches to let TIME_WAIT sockets clear
+                    if batch_end < total_ips:
+                        console.print('[Pausing 3s between batches to free socket resources...]', 
+                                    style='dim')
+                        time.sleep(3)
+        
         except KeyboardInterrupt:
-            console.print('aborted by user.', style='bold red')
+            # Write interruption notice to live file
+            with open(live_results_path, 'a', encoding='utf-8') as live_file:
+                live_file.write(f"\n\n!!! SCAN INTERRUPTED BY USER at {datetime.now().strftime('%H:%M:%S')} !!!\n")
+                live_file.write(f"Processed {batch_num} batches before interruption\n")
+                live_file.flush()
+
+            console.print('\n[Aborted by user]', style='bold red')
             raise
-        except Exception as e:
-            console.print(e)
-        
-        
+
+        # Write final summary to live file
+        with open(live_results_path, 'a', encoding='utf-8') as live_file:
+            live_file.write(f"\n{'='*100}\n")
+            live_file.write(f"SCAN COMPLETE - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            live_file.write(f"Total Valid: {len(valid_ip_list)} | Invalid: {len(invalid_ip_list)} | Shared: {len(shared_ip_list)}\n")
+            live_file.write(f"\nSee sorted_list.txt for final sorted results\n")
+            # Sort by median latency (lower is better)
+
+        console.print(f'\n✓ Live results saved to: ./results/results_live.txt', style='cyan')
+
         sorted_list = sorted(valid_ip_list, key=lambda x: x[1], reverse=True)
-        console.print(f'\nFound {len(sorted_list)} accessible IPs [Sorted by connection time]'.__str__(), style='green')
         
-        with open('./results/sorted_list.txt', 'w') as output_file:
+        console.print(f'\nFound {len(sorted_list)} accessible IPs [Sorted by median latency + stability]', 
+                    style='green')
+        
+        with open('./results/sorted_list.txt', 'w', encoding='utf-8') as output_file:
+            output_file.write(f"Total Tested: {total_ips} | Valid: {len(sorted_list)} | "
+                            f"Invalid: {len(invalid_ip_list)} | Shared: {len(shared_ip_list)}\n")
+            output_file.write("="*100 + "\n\n")
+            
             for idx, ip in enumerate(sorted_list):
-                console.print(f"[{idx+1:>3}]  IP:{ip[0]:>16}     TCP: {round(float(ip[1] * 1000),1)}ms     OPERATOR: {ip[2]}".__str__(), style='green')
-                output_file.write(f"[{idx+1:>3}]  IP:{ip[0]:>16}     TCP: {round(float(ip[1] * 1000),1)}ms     OPERATOR: {ip[2]}\n")
+                latency_ms = round(float(ip[1] * 1000), 1)
+                jitter_ms = round(float(ip[3] * 1000), 1)
+                success_rate = f"{ip[4]}/{ping_attempts}"
+                
+                # Stability indicator
+                if ip[3] < 0.05:  # <50ms jitter
+                    stability = "[OK]"
+                elif ip[3] < 0.15:  # <150ms jitter
+                    stability = "[!!]"
+                else:
+                    stability = "[XX]"
+                
+                output = (f"[{idx+1:>3}]  IP:{ip[0]:>16}  Latency:{latency_ms:>6}ms  "
+                        f"Jitter:±{jitter_ms:>5}ms  {stability}  Success:{success_rate}  OP:{ip[2]}")
+                console.print(output, style='green')
+                output_file.write(output + '\n')
                 time.sleep(0.01)
         
-        console.print(f'✓ Results saved to: ./results/sorted_list.txt', style='cyan')
+        console.print(f'\n✓ Results saved with stability metrics to ./results/sorted_list.txt', 
+                    style='cyan')
         
         if invalid_ip_list:
-            console.print(f'\nFound {len(invalid_ip_list)} unresponsive IPs (port 443 closed)', style='yellow')
+            console.print(f'\n{len(invalid_ip_list)} IPs failed reliability test', style='yellow')
         
         if shared_ip_list:
-            console.print(f'\nFound {len(shared_ip_list)} IPs valid on multiple operators:', style='cyan')
-            for ip in shared_ip_list:
-                console.print(f'IP:{ip[0]:>16}     TCP: {round(float(ip[1] * 1000),1)}ms      OPERATOR: {ip[2]}'.__str__(), style='cyan')  
+            console.print(f'{len(shared_ip_list)} IPs valid on multiple operators', style='cyan')
         
         return sorted_list
+
